@@ -13,7 +13,7 @@ function CreateStream(buffer)
                     for i = 1,#buffer + more,math.max(add,1) do
                         local s = i - more
                         local e = s + (add > 1 and add or 0)
-                        local chunk = func(buffer[s + ":" + e],s,e)
+                        local chunk = handler(buffer[s + ":" + e],s,e)
                         if breaked then
                             last = s
                             break
