@@ -6,6 +6,8 @@
         <script src="utils/stream.lua" type="shared" />
     <!-- Utils -->
     <!-- Scripts -->
-        <script src="scripts/js_vm.lua" type="shared" />
+        <script src="scripts/virtaul_machine.lua" type="shared" />
+        <script src="scripts/stack.lua" type="shared" />
+        <script src="scripts/eslint.lua" type="shared" />
     <!-- Scripts -->
 </meta>
