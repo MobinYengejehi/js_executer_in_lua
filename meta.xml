@@ -1,5 +1,5 @@
 <meta>
-    <info author="MobinYengejehi & Mad3in7" version="1.0.0" description="This is a virtaul machine that loads javascript codes." type="script" />
+    <info author="MobinYengejehi & Mad3in07" version="1.0.0" description="This is a virtaul machine that loads javascript codes." type="script" />
     <!-- Scripts -->
         <script src="scripts/jsVM.lua" type="shared" />
     <!-- Scripts -->
