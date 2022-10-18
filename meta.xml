@@ -1,6 +1,11 @@
 <meta>
     <info author="MobinYengejehi & Mad3in07" version="1.0.0" description="This is a virtaul machine that loads javascript codes." type="script" />
+    <!-- Utils -->
+        <script src="utils/string.lua" type="shared" />
+        <script src="utils/data.lua" type="shared" />
+        <script src="utils/stream.lua" type="shared" />
+    <!-- Utils -->
     <!-- Scripts -->
-        <script src="scripts/jsVM.lua" type="shared" />
+        <script src="scripts/js_vm.lua" type="shared" />
     <!-- Scripts -->
 </meta>
