@@ -1,7 +1,7 @@
 local Data = {}
 
 function SetElementData(element,key,value)
-    if IsElement(element) and key ~= nil then 
+    if isElement(element) and key ~= nil then 
         if type(Data[element]) ~= "table" then 
             Data[element] = {}
         end
@@ -12,15 +12,21 @@ function SetElementData(element,key,value)
 end
 
 function GetElementData(element,key)
-    if IsElement(element) and key ~= nil then 
+    if isElement(element) and key ~= nil then 
         if type(Data[element]) == "table" then 
             return Data[element][key]
         end
     end
 end
 
+function GetElementDataObject(element)
+    if isElement(element) then
+        return Data[element]
+    end
+end
+
 function RemoveElementData(element,key)
-    if IsElement(element) and key ~= nil then 
+    if isElement(element) and key ~= nil then 
         if type(Data[element]) == "table" then
             Data[element][key] = nil
             collectgarbage("collect")
@@ -29,7 +35,7 @@ function RemoveElementData(element,key)
 end
 
 function ClearElementData(element)
-    if IsElement(element) then 
+    if isElement(element) then 
         if type(Data[element]) == "table" then 
             Data[element] = nil
             collectgarbage("collect")
