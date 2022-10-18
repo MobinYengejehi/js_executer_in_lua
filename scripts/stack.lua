@@ -12,7 +12,11 @@ function CreateStack()
             
         end,
         tonumber = function()
-            
+            -- check kon bbin in oke ya algorithm ro eshtab raftam
+            local last_stack = stack[#stack-1]
+            if(last_stack and type(last_stack.type) == "number") then
+                return last_stack.value
+            end
         end,
         tostring = function()
             
