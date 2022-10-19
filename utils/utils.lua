@@ -1,5 +1,19 @@
 math.NaN = 0/0
 
+function enum(values)
+    if type(values) == "table" then 
+        local result = {}
+        for key,value in pairs(values) do 
+            if type(key) == "string" then
+                result[key] = value 
+            elseif type(key) == "number" then 
+                result[value] = {}
+            end
+        end
+        return result
+    end
+end
+
 function RandomKey(amount)
     amount = tonumber(amount) or 8
     if amount then
