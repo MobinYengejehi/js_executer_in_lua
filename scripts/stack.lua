@@ -41,11 +41,15 @@ function CreateStack()
         tofunction = function()
             
         end,
-        pushnumber = function()
-            
+        pushnumber = function(val)
+            if(val and type(val) == "number")then
+                table.insert(stack,{type = "number",value = val})
+            end
         end,
-        pushstring = function()
-            
+        pushstring = function(val)
+            if(val and type(val) == "string")then
+                table.insert(stack,{type = "string",value = val})
+            end
         end,
         pushobject = function()
             
