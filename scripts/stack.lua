@@ -13,6 +13,13 @@ LuaTypes = enum{
     Function = "function"
 }
 
+VariableSafety = enum{
+    "Nothing",
+    Const = "const",
+    Let = "let",
+    Var = "var"
+}
+
 VariableTypes = enum{
     "Undefined",
     "Null",
@@ -41,14 +48,102 @@ function CreateStack(machine)
                 end
             end
         end,
-        hasglobal = function(name)
-
+        existsglobal = function(name)
+            return not dead and (
+                type(name) == LuaTypes.String and
+                type(machine.global[name]) == LuaTypes.Table
+            )
         end,
         getglobal = function(name)
-
+            if self.existsglobal(name) then
+                local variable = machine.global[name].stack
+                if variable.type == VariableTypes.Undefined then
+                    self.pushundefined()
+                elseif variable.type == VariableTypes.Null then
+                    self.pushnull()
+                elseif variable.type == VariableTypes.Boolean then
+                    self.pushboolean(variable.value)
+                elseif variable.type == VariableTypes.Number then
+                    self.pushnumber(variable.value)
+                elseif variable.type == VariableTypes.String then
+                    self.pushstring(variable.value)
+                elseif variable.type == VariableTypes.Object then
+                    self.pushobject(variable.value)
+                elseif variable.type == VariableTypes.Function then
+                    self.pushfunction(variable.value)
+                end
+            end
         end,
-        setglobal = function(name)
-
+        changableglobal = function(name)
+            return self.existsglobal(name) and machine.global[name].safety ~= VariableSafety.Const
+        end,
+        setglobal = function(name,safety)
+            if not dead and #stack > 0 then
+                if type(name) == LuaTypes.String then 
+                    if self.existsglobal(name) then
+                        if machine.global[name].safety ~= VariableSafety.Const then
+                            machine.global[name].stack = stack[#stack]
+                            self.pop(1)
+                        else
+                            Error("Can't change data of a const variable")
+                        end
+                    else
+                        machine.global[name] = {
+                            safety = type(safety) == LuaTypes.String and safety or VariableSafety.Const,
+                            stack = stack[#stack]
+                        }
+                        self.pop(1)
+                    end
+                end
+            end
+        end,
+        deleteglobal = function(name)
+            if self.existsglobal(name) then
+                machine.global[name] = nil
+                collectgarbage("collect")
+            end
+        end,
+        existsref = function(key)
+            if not dead then
+                if type(key) == LuaTypes.Table then
+                    return type(machine.ref[key]) == LuaTypes.Table
+                end
+            end
+            return false
+        end,
+        ref = function()
+            if not dead and #stack > 0 then
+                local key = {}
+                machine.ref[key] = stack[#stack]
+                self.pop(1)
+                return key
+            end
+        end,
+        getref = function(key)
+            if self.existsref(key) then
+                local variable = machine.ref[key]
+                if variable.type == VariableTypes.Undefined then
+                    self.pushundefined()
+                elseif variable.type == VariableTypes.Null then
+                    self.pushnull()
+                elseif variable.type == VariableTypes.Boolean then
+                    self.pushboolean(variable.value)
+                elseif variable.type == VariableTypes.Number then
+                    self.pushnumber(variable.value)
+                elseif variable.type == VariableTypes.String then
+                    self.pushstring(variable.value)
+                elseif variable.type == VariableTypes.Object then
+                    self.pushobject(variable.value)
+                elseif variable.type == VariableTypes.Function then
+                    self.pushfunction(variable.value)
+                end
+            end
+        end,
+        unref = function(key)
+            if self.existsref(key) then
+                machine.ref[key] = nil
+                collectgarbage("collect")
+            end
         end,
         pushundefined = function()
             if not dead then
