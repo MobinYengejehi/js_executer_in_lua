@@ -24,23 +24,28 @@ VariableTypes = enum{
     "Symbol"
 }
 
-function CreateStack()
+function CreateStack(machine)
     local global = {}
     local stack = {}
-    local refs = {}
     local dead = false
-    local function v_type(index)
-        if not dead then
-            index = tonumber(index)
-            if index then
-                if type(stack[index]) == LuaTypes.Table then
-                    return stack[index].type
+    local self
+    self = {
+        type = function(index)
+            if not dead then
+                index = tonumber(index)
+                if index then
+                    if type(stack[index]) == LuaTypes.Table then
+                        return stack[index].type
+                    end
                 end
             end
-        end
-    end
-    return {
-        type = v_type,
+        end,
+        getglobal = function(name)
+
+        end,
+        setglobal = function(name)
+
+        end,
         pushundefined = function()
             if not dead then
                 table.insert(stack,{
@@ -88,13 +93,26 @@ function CreateStack()
             end
         end,
         pushfunction = function(value)
+            if not dead then 
+                if type(value) == LuaTypes.Function then 
+                    table.insert(stack,{
+                        type = VariableTypes.Function,
+                        value = value
+                    })
+                end
+            end
+        end,
+        newobject = function()
+
+        end,
+        setobject = function()
 
         end,
         tonil = function(index)
             if not dead then
                 if (
-                    v_type(index) == VariableTypes.Null or
-                    v_type(index) == VariableTypes.Undefined
+                    self.type(index) == VariableTypes.Null or
+                    self.type(index) == VariableTypes.Undefined
                 ) then
                     return nil
                 end
@@ -103,7 +121,7 @@ function CreateStack()
         end,
         toboolean = function(index)
             if not dead then
-                if v_type(index) == VariableTypes.Boolean then 
+                if self.type(index) == VariableTypes.Boolean then 
                     return stack[index].value
                 end
             end
@@ -111,7 +129,7 @@ function CreateStack()
         end,
         tonumber = function(index)
             if not dead then 
-                if v_type(index) == VariableTypes.Number then
+                if self.type(index) == VariableTypes.Number then
                     return stack[index].value
                 end
             end
@@ -119,11 +137,58 @@ function CreateStack()
         end,
         tostring = function(index)
             if not dead then
-                if v_type(index) == VariableTypes.String then
+                if self.type(index) == VariableTypes.String then
                     return stack[index].value
                 end
             end
             return LuaTypes.Nothing
+        end,
+        toobject = function(index)
+            if not dead then
+                if self.type(index) == VariableTypes.Object then
+                    return stack[index].value
+                end
+            end
+            return LuaTypes.Nothing
+        end,
+        tofunction = function(index)
+            if not dead then
+                if self.type(index) == VariableTypes.Function then 
+                    return stack[index].value
+                end
+            end
+            return LuaTypes.Nothing
+        end,
+        call = function(argsCount,returnCount)
+            if not dead then
+                if self.type(#stack) == VariableTypes.Function then
+                    argsCount = math.max(tonumber(argsCount) or 0,#stack)
+                    returnCount = tonumber(returnCount) or 0
+                    local funcStack = CreateStack(machine)
+                    if argsCount > 0 then
+                        for i = -#stack,-#stack + argsCount do
+                            i = math.abs(i)
+                            if self.type(i) == VariableTypes.Null then 
+                                funcStack.pushnull()
+                            elseif self.type(i) == VariableTypes.Undefined then
+                                funcStack.pushundefined()
+                            elseif self.type(i) == VariableTypes.Boolean then
+                                funcStack.pushboolean(self.toboolean(i))
+                            elseif self.type(i) == VariableTypes.Number then
+                                funcStack.pushnumber(self.tonumber(i))
+                            elseif self.type(i) == VariableTypes.String then
+                                funcStack.pushstring(self.tostring(i))
+                            elseif self.type(i) == VariableTypes.Function then
+                                funcStack.pushfunction(self.tofunction(i))
+                            end
+                        end
+                    end
+                    local rtCount = stack[#stack].value(funcStack)
+                    rtCount = tonumber(rtCount) or 0
+                    funcStack.free()
+                    --self.pop(1 + argsCount + rtCount - returnCount)
+                end
+            end
         end,
         pop = function(amount)
             if not dead then
@@ -139,32 +204,63 @@ function CreateStack()
                 end
             end
         end,
+        clear = function()
+            if not dead then
+                for i = 1,#stack do
+                    if #stack > 0 then 
+                        table.remove(stack,#stack)
+                    else
+                        break
+                    end
+                end
+            end
+        end,
+        size = function()
+            return not dead and #stack or 0
+        end,
         alive = function()
             return dead
         end,
         free = function()
+            self.claer()
+            machine = nil
             global = nil
             stack = nil
-            refs = nil
-            v_type = nil
+            self = nil
             dead = true
             collectgarbage("collect")
         end
     }
+    return self
 end
 
---- test
-    
-local stack = CreateStack()
+-- example:
+
+local machine = CreateVirtualMachine()
+
+local stack = CreateStack(machine)
 
 stack.pushnull()
 stack.pushundefined()
 stack.pushboolean(true)
 stack.pushstring("salam chetori?")
+stack.pushfunction(function(stack)
+    --[[print("called to lua function")
+    stack.pushboolean(true)
+    return 1 -- return args count--]]
+    print("tst",stack.tostring(1))
+end)
 
---stack.pop(1)
+stack.call()
 
-local value = stack.tostring(4)
+local value = stack.toboolean(stack.size())
 
+function getType(index)
+    for type,value in pairs(VariableTypes) do
+        if stack.type(index) == value then 
+            return type
+        end
+    end
+end
 
-print(value,value == LuaTypes.Nothing)
+print(value,value == LuaTypes.Nothing,stack.size(),getType(stack.size()))
