@@ -153,6 +153,8 @@ function CreateStack()
     }
 end
 
+--- test
+    
 local stack = CreateStack()
 
 stack.pushnull()
