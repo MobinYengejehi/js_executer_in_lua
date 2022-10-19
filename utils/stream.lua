@@ -3,14 +3,16 @@ function CreateStream(buffer)
         local more = 0
         local breaked = false
         return {
-            Read = function(handler,additional) -- need to check!
+            Read = function(handler,additional)
                 if type(handler) == "function" then
                     more = 0
                     breaked = false
                     local result = ""
                     local last = 0
-                    local add = math.max(additional,0)
-                    for i = 1,#buffer + more,math.max(add,1) do
+                    local add = tonumber(additional) or 0
+                    local i = 1
+                    local a = math.max(add,1)
+                    while i <= #buffer + more do
                         local s = i - more
                         local e = s + (add > 1 and add or 0)
                         local chunk = handler(buffer[s + ":" + e],s,e)
@@ -19,9 +21,10 @@ function CreateStream(buffer)
                             break
                         else
                             if type(chunk) == "string" then
-                                result = result + chunk 
+                                result = result + chunk
                             end
                         end
+                        i = i + a
                     end
                     return result,last > 0 and buffer[last + ":"]
                 end
@@ -47,29 +50,3 @@ function CreateStream(buffer)
         } 
     end
 end
-
-
--- example:
-
-local stream = CreateStream("hi im mobin here")
-
-local back = 0
-
-local result,afterBreaked = stream.Read(function(byte,i)
-    if (byte == "o") then
-        if back > 10 then
-            stream.Break()
-            print("breaked on",i)
-        else
-            print("reading byte : ",byte,"for",back,"th")
-            stream.Back()
-            back = back + 1
-        end
-        return nil
-    end
-    return byte
-end)
-
-stream.Free()
-
-print("data from stream is : ",stream," | and breaked : ",afterBreaked)
