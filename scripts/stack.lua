@@ -39,7 +39,7 @@ function CreateStack()
         pushnumber = function()
             
         end,
-        pushstring = function(val)
+        pushstring = function()
             
         end,
         pushobject = function()
