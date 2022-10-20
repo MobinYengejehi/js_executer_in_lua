@@ -1,6 +1,13 @@
+VERSION = 0x01
+
 GLOBALINDEX = 1
 UNDEFINED = enum{}
 NULL = enum{}
+
+Line = 0
+Character = 0
+ValidChars = "abcdefghijklmnopqrstuvwxyz$1234567890_"
+Numbers = "1234567890"
 
 LuaTypes = enum{
     "Nothing",
@@ -31,12 +38,121 @@ VariableTypes = enum{
     "Symbol"
 }
 
+Syntax = enum{
+    Var = "var",
+    Let = "let",
+    Const = "const",
+    Import = "import",
+    From = "from",
+    As = "as",
+    Function = "function",
+    FunctionOpen = "(",
+    FunctionClose = ")",
+    ScopeOpen = "{",
+    ScopeClose = "}",
+    If = "if",
+    Else = "else",
+    For = "for",
+    While = "while",
+    Do = "do",
+    And = "&",
+    Or = "|",
+    String = "'",
+    String_2 = '"',
+    LongString = "`",
+    StringBackSlash = "\\",
+    Async = "async",
+    Await = "await",
+    Yield = "yield",
+    Delete = "delete",
+    Lambda = "=>",
+    Static = "static",
+    Class = "class",
+    Enum = "enum",
+    ArrayOpen = "[",
+    ArrayClose = "]",
+    ObjectOpen = "{",
+    ObjectClose = "}",
+    ObjectEquil = ":",
+    Cama = ",",
+    ParOpen = "(",
+    ParClose = ")",
+    Add = "+",
+    Equil = "=",
+    Minus = "-",
+    Multiply = "*",
+    Devide = "/",
+    Remainder = "%",
+    Add_2 = "++",
+    Minus_2 = "--",
+    Multiply_2 = "**",
+    AddEquil = "+=",
+    MinusEquil = "-=",
+    MultiplyEquil = "*=",
+    DevideEquil = "/=",
+    Power = "^",
+    LambdaAnd = "?",
+    LambdaOr = ":",
+    SemiColon = ";",
+    Comment = "//",
+    LongCommentOpen = "/*",
+    LongCommentClose = "*/",
+    ObjectKey = ".",
+    ObjectIndexOpen = "[",
+    ObjectIndexClose = "]",
+    StringJoin = "+",
+    In = "in",
+    Of = "of",
+    Break = "break",
+    Switch = "switch",
+    Case = "case",
+    Default = "default",
+    Typeof = "typeof",
+    Instanceof = "instanceof",
+    BitLeftShift = "<",
+    BitLeftShift_2 = "<<",
+    BitRightShift = ">",
+    BitRightShift_2 = ">>",
+    BitRightShiftZero = ">>>",
+    BitAnd = "&",
+    BitOr = "|",
+    BitXOr = "^",
+    BitNot = "~",
+    New = "new",
+    Return = "return",
+    JoinObject = "...",
+}
+
+function Error(message)
+    message = type(message) == LuaTypes.String and message or "Unknown"
+    outputDebugString("Javascript(" + Line + ":" + Character + ") : " + message,1)
+end
+
+function IsValidChar(char)
+    for i = 1,#ValidChars do 
+        if ValidChars[i] == char then
+            return true
+        end
+    end
+    return false
+end
+
+function IsNumber(number)
+    for i = 1,#Numbers do
+        if Numbers[i] == number then 
+            return true
+        end
+    end
+    return false
+end
+
 function CreateStack(machine)
     local global = {}
     local stack = {}
     local dead = false
     local self
     self = {
+        global = global,
         type = function(index)
             if not dead then
                 index = tonumber(index)
@@ -46,6 +162,60 @@ function CreateStack(machine)
                         return stack[index].type
                     end
                 end
+            end
+        end,
+        existslocal = function(name)
+            return not dead and (
+                type(name) == LuaTypes.String and
+                type(global[name]) == LuaTypes.Table
+            )
+        end,
+        getlocal = function(name)
+            if self.existslocal(name) then
+                local variable = global[name].stack
+                if variable.type == VariableTypes.Undefined then
+                    self.pushundefined()
+                elseif variable.type == VariableTypes.Null then
+                    self.pushnull()
+                elseif variable.type == VariableTypes.Boolean then
+                    self.pushboolean(variable.value)
+                elseif variable.type == VariableTypes.Number then
+                    self.pushnumber(variable.value)
+                elseif variable.type == VariableTypes.String then
+                    self.pushstring(variable.value)
+                elseif variable.type == VariableTypes.Object then
+                    self.pushobject(variable.value)
+                elseif variable.type == VariableTypes.Function then
+                    self.pushfunction(variable.value)
+                end
+            else
+                self.pushundefined()
+            end
+        end,
+        setlocal = function(name,safety)
+            if not dead and #stack > 0 then
+                if type(name) == LuaTypes.String then 
+                    if self.existslocal(name) then
+                        if global[name].safety ~= VariableSafety.Const then
+                           global[name].stack = stack[#stack]
+                        else
+                            Error("variable `" + name + "` is protected")
+                        end
+                        self.pop(1)
+                    else
+                        global[name] = {
+                            safety = type(safety) == LuaTypes.String and safety or VariableSafety.Var,
+                            stack = stack[#stack]
+                        }
+                        self.pop(1)
+                    end
+                end
+            end
+        end,
+        deletelocal = function(name)
+            if self.existslocal(name) then
+                global[name] = nil
+                collectgarbage("collect")
             end
         end,
         existsglobal = function(name)
@@ -72,6 +242,8 @@ function CreateStack(machine)
                 elseif variable.type == VariableTypes.Function then
                     self.pushfunction(variable.value)
                 end
+            else
+                self.pushundefined()
             end
         end,
         changableglobal = function(name)
@@ -83,13 +255,13 @@ function CreateStack(machine)
                     if self.existsglobal(name) then
                         if machine.global[name].safety ~= VariableSafety.Const then
                             machine.global[name].stack = stack[#stack]
-                            self.pop(1)
                         else
-                            Error("Can't change data of a const variable")
+                            Error("variable `" + name + "` is protected")
                         end
+                        self.pop(1)
                     else
                         machine.global[name] = {
-                            safety = type(safety) == LuaTypes.String and safety or VariableSafety.Const,
+                            safety = type(safety) == LuaTypes.String and safety or VariableSafety.Var,
                             stack = stack[#stack]
                         }
                         self.pop(1)
@@ -269,6 +441,9 @@ function CreateStack(machine)
                 if self.type(index) == VariableTypes.Function then
                     returnCount = tonumber(returnCount) or 0
                     local funcStack = CreateStack(machine)
+                    for name,value in pairs(global) do
+                        funcStack.global[name] = value
+                    end
                     if argsCount > 0 then
                         for i = #stack - argsCount + 1,#stack do
                             if not self.type(i) then
@@ -280,6 +455,18 @@ function CreateStack(machine)
                     end
                     local rtCount = stack[index].value(funcStack)
                     self.pop(1 + argsCount)
+                    for name,value in pairs(funcStack.global) do 
+                        if global[name] then
+                            if global[name].safety ~= VariableSafety.Const then
+                                if global[name].stack.type ~= value.stack.type then
+                                    global[name].stack.type = value.stack.type
+                                end
+                                if global[name].stack.value ~= value.stack.value then
+                                    global[name].stack.value = value.stack.value
+                                end
+                            end
+                        end
+                    end
                     rtCount = math.min(tonumber(rtCount) or 0,returnCount)
                     if rtCount > 0 and returnCount > 0 then
                         local size = funcStack.size()
@@ -303,6 +490,12 @@ function CreateStack(machine)
                     end
                     funcStack.free()
                 end
+            end
+        end,
+        eval = function(code)
+            if not dead and type(code) == LuaTypes.String and #code > 0 then
+                local ignore = 0
+                local ignoreSame = false -- ignores if new chunk and last chunk are same
             end
         end,
         pop = function(amount)
@@ -374,45 +567,3 @@ function copyValue(s1,s2,i)
         s2.pushfunction(s1.tofunction(i))
     end
 end
-
--- example:
-
-function getType(stack,index)
-    for type,value in pairs(VariableTypes) do
-        if stack.type(index) == value then
-            return type
-        end
-    end
-end
-
-local tick = getTickCount()
-
-local machine = CreateVirtualMachine()
-
-local stack = CreateStack(machine)
-
-stack.pushnull()
-stack.pushundefined()
-stack.pushboolean(true)
-stack.pushstring("salam chetori?")
-stack.pushfunction(function(stack)
-    print("tst",stack.tostring(1),stack.size(),getType(stack,2))
-    stack.pushstring("this is a return value")
-    stack.pushstring("another value")
-    stack.pushstring("and the third value")
-    return 1
-end)
-
-stack.pushstring("hi this is inside func")
-stack.pushnumber(24)
-
-local ret = 1
-
-stack.call(2,ret)
-
-local value = stack.tostring(-1)
-local tp = getType(stack,-1)
-
-stack.pop(ret)
-
-print(value,value == LuaTypes.Nothing,stack.size(),getType(stack,stack.size()),tp,getTickCount() - tick)
