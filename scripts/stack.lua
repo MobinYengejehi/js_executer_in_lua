@@ -8,6 +8,7 @@ Line = 0
 Character = 0
 ValidChars = "abcdefghijklmnopqrstuvwxyz$1234567890_"
 Numbers = "1234567890"
+Strict = "use strict"
 
 LuaTypes = enum{
     "Nothing",
@@ -39,10 +40,11 @@ VariableTypes = enum{
 }
 
 Syntax = enum{
-    Var = "var",
-    Let = "let",
-    Const = "const",
+    Var = VariableSafety.Var,
+    Let = VariableSafety.Let,
+    Const = VariableSafety.Const,
     Import = "import",
+    Export = "export",
     From = "from",
     As = "as",
     Function = "function",
@@ -65,10 +67,9 @@ Syntax = enum{
     Await = "await",
     Yield = "yield",
     Delete = "delete",
-    Lambda = "=>",
+    Arrow = "=>",
     Static = "static",
     Class = "class",
-    Enum = "enum",
     ArrayOpen = "[",
     ArrayClose = "]",
     ObjectOpen = "{",
@@ -90,7 +91,6 @@ Syntax = enum{
     MinusEquil = "-=",
     MultiplyEquil = "*=",
     DevideEquil = "/=",
-    Power = "^",
     LambdaAnd = "?",
     LambdaOr = ":",
     SemiColon = ";",
@@ -121,11 +121,44 @@ Syntax = enum{
     New = "new",
     Return = "return",
     JoinObject = "...",
+    Try = "try",
+    Catch = "catch",
+    Line = "\n"
 }
 
-function Error(message)
+ImportantSyntax = {
+    "while",
+    "for",
+    "do",
+    "function",
+    "instanceof",
+    "typeof",
+    "try",
+    "catch",
+    "new",
+    "return",
+    "if",
+    "else",
+    "switch",
+    "case",
+    "default",
+    "delete",
+    "in",
+    "break",
+    "class",
+    "import",
+    "export"
+}
+
+EvalEvents = enum{
+    "DefineVariable",
+    "DefineFunction",
+    "Strict"
+}
+
+function Error(message,r,g,b)
     message = type(message) == LuaTypes.String and message or "Unknown"
-    outputDebugString("Javascript(" + Line + ":" + Character + ") : " + message,1)
+    outputDebugString("Javascript(" + Line + ":" + Character + ") => " + message,0,r,g,b)
 end
 
 function IsValidChar(char)
@@ -141,6 +174,32 @@ function IsNumber(number)
     for i = 1,#Numbers do
         if Numbers[i] == number then 
             return true
+        end
+    end
+    return false
+end
+
+function IsEmpty(char)
+    return not IsValidChar(char) and (
+        char ~= "[" and
+        char ~= "]" and
+        char ~= "{" and
+        char ~= "}"
+    )
+end
+
+function IsStringBracket(char)
+    return (
+        char == Syntax.String or
+        char == Syntax.String_2 or
+        char == Syntax.LongString
+    )
+end
+
+function IsImportantSyntax(chunk,i)
+    for _,syntax in ipairs(ImportantSyntax) do
+        if sub(chunk,i,#syntax) == syntax then
+            return syntax
         end
     end
     return false
@@ -495,9 +554,192 @@ function CreateStack(machine)
         eval = function(code)
             if not dead and type(code) == LuaTypes.String and #code > 0 then
                 local ignore = 0
-                local ignoreSame = false -- ignores if new chunk and last chunk are same
+                local ignoreSame = false
+                local lastChunk = nil
+                local event = nil
+                local events = {}
+                local lines = {0}
+                local insideString = false
+                local insideComment = false
+                local longComment = false
+                local variableSafety = nil
+                local openedStringBracket = nil
+                local beginingOfScope = true
+                local afterEquil = false
+                local strPack = ""
+                local varName = ""
+                local scope = 0
+                local stream = CreateStream(code)
+                local function SyntaxError(error)
+                    stream.Break()
+                    Line = #lines
+                    Character = lines[Line]
+                    Error("Syntax Error: " + error,255,0,0)
+                    Line,Character = 0,0
+                end
+                stream.Read(function(byte,i)
+                    if ignore > 0 then
+                        ignore = ignore - 1
+                        return
+                    end
+                    if ignoreSame then
+                        if lastChunk ~= byte then
+                            ignoreSame = false
+                            stream.Back()
+                        end
+                        return
+                    end
+                    lastChunk = byte
+                    if byte == Syntax.Line then
+                        if insideComment and not longComment then
+                            insideComment = false
+                        end
+                        if insideString then
+                            if (
+                                openedStringBracket == Syntax.String or
+                                openedStringBracket == Syntax.String_2
+                            ) then
+                                insideString = false
+                                openedStringBracket = nil
+                                SyntaxError("Unterminated string literal")
+                                return
+                            end
+                        end
+                        table.insert(lines,0)
+                    end
+                    lines[#lines] = lines[#lines] + 1
+                    if insideComment then
+                        if longComment then 
+                            if sub(code,i,#Syntax.LongCommentClose) == Syntax.LongCommentClose then
+                                ignore = #Syntax.LongCommentClose - 1
+                                insideComment = false
+                                longComment = false
+                            end
+                        end
+                        return
+                    end
+                    if insideString then
+                        if sub(code,i,#openedStringBracket) == openedStringBracket then
+                            if beginingOfScope then
+                                beginingOfScope = false
+                                if strPack == Strict then
+                                    table.insert(events,{
+                                        event = EvalEvents.Strict,
+                                        scope = scope
+                                    })
+                                end
+                            end
+                            ignore = #openedStringBracket - 1
+                            insideString = false
+                            openedStringBracket = nil
+                            strPack = ""
+                        else
+                            strPack = strPack + byte
+                        end
+                        return
+                    end
+                    if byte == Syntax.Line or byte == Syntax.SemiColon then
+                        -- event = nil
+                        return
+                    end
+                    if sub(code,i,#Syntax.Comment) == Syntax.Comment then
+                        ignore = #Syntax.Comment - 1
+                        insideComment = true
+                        return
+                    end
+                    if sub(code,i,#Syntax.LongCommentOpen) == Syntax.LongCommentOpen then
+                        ignore = #Syntax.LongCommentOpen - 1
+                        insideComment = true
+                        longComment = true
+                        return
+                    end
+                    if not event then 
+                        if sub(code,i,#Syntax.Var) == Syntax.Var and IsEmpty(code[i + #Syntax.Var]) then
+                            ignore = #Syntax.Var - 1
+                            event = EvalEvents.DefineVariable
+                            variableSafety = VariableSafety.Var
+                            return
+                        end
+                        if sub(code,i,#Syntax.Let) == Syntax.Let and IsEmpty(code[i + #Syntax.Let]) then
+                            ignore = #Syntax.Let - 1
+                            event = EvalEvents.DefineVariable
+                            variableSafety = VariableSafety.Let
+                            return
+                        end
+                        if sub(code,i,#Syntax.Const) == Syntax.Const and IsEmpty(code[i + #Syntax.Const]) then
+                            ignore = #Syntax.Const - 1
+                            event = EvalEvents.DefineVariable
+                            variableSafety = VariableSafety.Const
+                            return
+                        end
+                    else
+                        if event == EvalEvents.DefineVariable then
+                            if not afterEquil and IsStringBracket(byte) then
+                                SyntaxError("Variable declaration expected")
+                                return
+                            end
+                            if #varName < 1 and IsNumber(byte) then
+                                SyntaxError("Variable declaration expected")
+                                return
+                            end
+                            local impSyntax = IsImportantSyntax(code,i)
+                            if #varName < 1 and impSyntax then
+                                SyntaxError("'" + impSyntax + "' is not allowed as a variable declaration name")
+                                return
+                            end
+                            -- error is  when const didn't have equil
+                            --[[if variableSafety == VariableSafety.Const then
+                                if sub(code,i,#Syntax.As) == Syntax.As then 
+                                    SyntaxError("'" + variableSafety + "' declarations must be initialized")
+                                    return
+                                end
+                            end--]]
+                            print("event defineVariable",varName,#varName)
+                            local data = {}
+                            if IsValidChar(byte) then
+                                varName = varName + byte
+                            else
+                                if sub(code,i,#Syntax.Equil) == Syntax.Equil then
+                                    ignore = #Syntax.Equil - 1
+                                    afterEquil = true
+                                    table.insert(data,varName)
+                                    varName = ""
+                                    return
+                                end
+                            end
+                            if afterEquil then
+                                if IsValidChar(byte) then 
+                                    afterEquil = false
+                                    return
+                                end
+                            end
+                        end
+                    end
+                    if sub(code,i,#Syntax.String) == Syntax.String then
+                        ignore = #Syntax.String - 1
+                        insideString = true
+                        openedStringBracket = Syntax.String
+                        return
+                    end
+                    if sub(code,i,#Syntax.String_2) == Syntax.String_2 then
+                        ignore = #Syntax.String_2 - 1
+                        insideString = true
+                        openedStringBracket = Syntax.String_2
+                        return
+                    end
+                    if sub(code,i,#Syntax.LongString) == Syntax.LongString then
+                        ignore = #Syntax.LongString - 1
+                        insideString = true
+                        openedStringBracket = Syntax.LongString
+                        return
+                    end
+                    beginingOfScope = false
+                end)
+                stream.Free()
+                print("here finished!")
             end
         end,
+        evalAsync = function() end,
         pop = function(amount)
             if not dead then
                 amount = tonumber(amount)
@@ -540,6 +782,10 @@ function CreateStack(machine)
         end
     }
     return self
+end
+
+function sub(str,i,count)
+    return str:sub(i,i + count - 1)
 end
 
 function getindex(index,size)
